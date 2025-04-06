@@ -183,13 +183,7 @@ def query_database(database, parameters):
 
     return full_df
 
-    
-
-
-
-    
-
-
+# hello
 
 
 def main():
