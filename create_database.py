@@ -6,6 +6,7 @@ import zipfile
 import os
 import sys
 import time
+import datetime
 
 # https://www.sec.gov/files/financial-statement-data-sets.pdf
 # https://xbrlview.fasb.org/yeti/resources/yeti-gwt/Yeti.jsp#tax~(id~174*v~10231)!net~(a~3474*l~832)!lang~(code~en-us)!rg~(rg~32*p~12)
@@ -79,8 +80,8 @@ def drop_nonstandard_tags(df):
 
     return standard_df
 
-def create_database_table(year, quarter):
-    con = sqlite3.connect("financials.db")
+def create_database_table(year, quarter, database_name):
+    con = sqlite3.connect(f"{database_name}.db")
     cursor = con.cursor()
 
     num_df, sub_df, tag_df = load_quarter(year, quarter)  
@@ -90,12 +91,14 @@ def create_database_table(year, quarter):
 
     merged_df = merge_two_dfs(num_df, sub_df, on_var="adsh")
 
-    merged_df.to_sql(f"{create_ddate(year, quarter)}_stacked", con, if_exists="replace", index=False)
+    merged_df.to_sql(f"{create_ddate(year, quarter)}", con, if_exists="replace", index=False)
 
-def create_database():
-    for year in range(2009, 2026):
+
+def create_database(database_name):
+    current_year = datetime.date.today().year
+    for year in range(2009, current_year+1):
         for quarter in range(1,5):
-            create_database_table(year, quarter)
+            create_database_table(year, quarter, database_name)
 
 
 def query_database(database, parameters, all_ciks, all_tags):
@@ -166,23 +169,28 @@ def find_all_tags(database, parameters):
     return tags
 
 def main():
-    year = 2024
+    year = 2023
     quarter = 3
-    # # TODO Request parameters: startdate, enddate, companies (by CIK), forms, desired data tags, 
+    # # # TODO Request parameters: startdate, enddate, companies (by CIK), forms, desired data tags, 
 
-    parameters = {"start_date": 20090630, "end_date": 20240930, "ciks": ["0000320193"], "tags": ["Assets", "LongTermDebt"]}
-    df = query_database("financials", parameters, all_ciks = False, all_tags = True)
-    df.to_csv("result.csv", index=False)
+    # parameters = {"start_date": 20090630, "end_date": 20240930, "ciks": ["0000320193"], "tags": ["Assets", "LongTermDebt"]}
+    # df = query_database("financials", parameters, all_ciks = False, all_tags = True)
+    # df.to_csv("result.csv", index=False)
 
  
-    pivoted_df = df.pivot_table(
-    index=["cik", "ddate"],
-    columns="tag",
-    values="value",
-    aggfunc="first"  # In case there are multiple values for same adsh/ddate/tag combination
-    ).reset_index()
-    print(pivoted_df)
-    pivoted_df.to_csv("pivoted_df.csv", index=False)
+    # pivoted_df = df.pivot_table(
+    # index=["cik", "ddate"],
+    # columns="tag",
+    # values="value",
+    # aggfunc="first"  # In case there are multiple values for same adsh/ddate/tag combination
+    # ).reset_index()
+    # print(pivoted_df)
+    # pivoted_df.to_csv("pivoted_df.csv", index=False)
+
+    # Testing sizes 
+    create_database_table(year, quarter, "baseline")
+
+
 
 
 
