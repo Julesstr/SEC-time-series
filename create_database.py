@@ -50,9 +50,12 @@ def load_quarter(year, quarter):
         download_quarter(sec_year, sec_quarter) 
 
 
-    num_df = pd.read_csv(f"Raw Aggregate Data/{sec_year}q{sec_quarter}/num.txt", delimiter="\t", encoding="utf-8")
-    sub_df = pd.read_csv(f"Raw Aggregate Data/{sec_year}q{sec_quarter}/sub.txt", delimiter="\t", encoding="utf-8")
-    tag_df = pd.read_csv(f"Raw Aggregate Data/{sec_year}q{sec_quarter}/tag.txt", delimiter="\t", encoding="utf-8")
+    num_df = pd.read_csv(f"Raw Aggregate Data/{sec_year}q{sec_quarter}/num.txt", delimiter="\t", encoding="utf-8",
+                         usecols=["adsh", "tag", "ddate", "qtrs", "value"])
+    sub_df = pd.read_csv(f"Raw Aggregate Data/{sec_year}q{sec_quarter}/sub.txt", delimiter="\t", encoding="utf-8",
+                         usecols=["adsh", "cik", "name", "sic", "fye", "form", "period", "fy", "fp"])
+    tag_df = pd.read_csv(f"Raw Aggregate Data/{sec_year}q{sec_quarter}/tag.txt", delimiter="\t", encoding="utf-8",
+                         usecols=["tag", "version", "custom"])
     
 
     return num_df, sub_df, tag_df
@@ -75,22 +78,18 @@ def merge_two_dfs(df1, df2, on_var):
 
     return merged_df
 
-def drop_nonstandard_tags(df):
-    standard_df = df[df["version"].str.startswith(("us-gaap", "ifrs"), na=False)]
-
-    return standard_df
-
 def create_database_table(year, quarter, database_name):
     con = sqlite3.connect(f"{database_name}.db")
     cursor = con.cursor()
 
-    num_df, sub_df, tag_df = load_quarter(year, quarter)  
+    num_df, sub_df, tag_df = load_quarter(year, quarter)
 
     num_df = include_only_quarter(num_df, year, quarter)
-    num_df = drop_nonstandard_tags(num_df)
-
     merged_df = merge_two_dfs(num_df, sub_df, on_var="adsh")
+    merged_df = merge_two_dfs(merged_df, tag_df, on_var="tag")
+    merged_df = merged_df[merged_df["custom"] == 0]
 
+    merged_df.info(memory_usage="deep")
     merged_df.to_sql(f"{create_ddate(year, quarter)}", con, if_exists="replace", index=False)
 
 
@@ -187,7 +186,9 @@ def main():
     # print(pivoted_df)
     # pivoted_df.to_csv("pivoted_df.csv", index=False)
 
-    # Testing sizes 
+    # Testing sizes
+    # Baseline - 343mb filesize. df = 1.6gb
+    # Restricted columns - 230mb filesize. df = 835mb
     create_database_table(year, quarter, "baseline")
 
 
