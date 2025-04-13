@@ -22,7 +22,7 @@ def download_quarter(year, quarter):
     response = requests.get(filename, headers=headers)
 
     if response.status_code != 200:
-        raise Exception(f"Invalid request. Status code: {response.status_code}")
+        raise Exception(f"Invalid request. Status code: {response.status_code}. Quarter does not exist.")
 
     
     with open(f"Raw Aggregate Data/{year}q{quarter}.zip", "wb") as file:
@@ -53,7 +53,8 @@ def load_quarter(year, quarter):
     num_df = pd.read_csv(f"Raw Aggregate Data/{sec_year}q{sec_quarter}/num.txt", delimiter="\t", encoding="utf-8",
                          usecols=["adsh", "tag", "ddate", "qtrs", "value"])
     sub_df = pd.read_csv(f"Raw Aggregate Data/{sec_year}q{sec_quarter}/sub.txt", delimiter="\t", encoding="utf-8",
-                         usecols=["adsh", "cik", "name", "sic", "fye", "form", "period", "fy", "fp"])
+                         usecols=["adsh", "cik", "name", "sic", "fye", "form", "period", "fy", "fp"],
+                         dtype={"cik": "int64"})
     tag_df = pd.read_csv(f"Raw Aggregate Data/{sec_year}q{sec_quarter}/tag.txt", delimiter="\t", encoding="utf-8",
                          usecols=["tag", "version", "custom"])
     
@@ -89,7 +90,9 @@ def create_database_table(year, quarter, database_name):
     merged_df = merge_two_dfs(merged_df, tag_df, on_var="tag")
     merged_df = merged_df[merged_df["custom"] == 0]
 
-    merged_df.info(memory_usage="deep")
+    # merged_df.info(memory_usage="deep")
+    
+    merged_df.to_csv("test.csv", index=False)
     merged_df.to_sql(f"{create_ddate(year, quarter)}", con, if_exists="replace", index=False)
 
 
@@ -109,12 +112,13 @@ def query_database(database, parameters, all_ciks, all_tags):
 
     relevant_tables = [
         table for table in tables
-        if table.endswith("_stacked") and parameters["start_date"] <= int(table[:8]) <= parameters["end_date"]
+        if parameters["start_date"] <= int(table[:8]) <= parameters["end_date"]
     ]
 
     full_df = pd.DataFrame()
 
     for table in relevant_tables:
+        print(f"Querying table {table} of database {database}")
         query = f"SELECT * FROM '{table}'"
         conditions = []
         values = []
@@ -140,7 +144,7 @@ def query_database(database, parameters, all_ciks, all_tags):
     con.close()
     return full_df
 
-def find_all_tags(database, parameters):
+def find_all_items(database, start_date, end_date, variable):
     con = sqlite3.connect(f"{database}.db")
     cursor = con.cursor()
 
@@ -149,47 +153,56 @@ def find_all_tags(database, parameters):
 
     relevant_tables = [
         table for table in tables
-        if table.endswith("_stacked") and parameters["start_date"] <= int(table[:8]) <= parameters["end_date"]
+        if start_date <= int(table[:8]) <= end_date
     ]
 
-    tags = set()
-
+    items = set()
 
     for table in relevant_tables:
-        cursor.execute(f"SELECT DISTINCT tag FROM '{table}'")
-        tags.update(row[0] for row in cursor.fetchall())
+        cursor.execute(f"SELECT DISTINCT {variable} FROM '{table}'")
+        items.update(row[0] for row in cursor.fetchall())
 
     con.close()
-    with open("all_tags.txt", "w") as f:
-        for item in list(tags):
-            f.write(f"{item}\n")
+    with open(f"all_{variable}.txt", "w") as f:
+        for item in list(items):
+            if item is not None and str(item) != 'nan':
+                f.write(f"{item}\n")
 
 
-    return tags
+    return items
 
 def main():
-    year = 2023
-    quarter = 3
-    # # # TODO Request parameters: startdate, enddate, companies (by CIK), forms, desired data tags, 
+    # year = 2023
+    # quarter = 3
 
-    # parameters = {"start_date": 20090630, "end_date": 20240930, "ciks": ["0000320193"], "tags": ["Assets", "LongTermDebt"]}
-    # df = query_database("financials", parameters, all_ciks = False, all_tags = True)
+    # find_all_items("financials", 20090630, 20240930, "cik")
+    with open("all_tag.txt", "r") as f:
+        all_tag = [line.strip() for line in f if line.strip()]
+
+    with open("all_cik.txt", "r") as f:
+        all_cik = [int(float(line.strip())) for line in f if line.strip()]
+
+    # parameters = {"start_date": 20090630, "end_date": 20240930, "ciks": all_cik[:100], "tags": all_tag[:100]}
+    parameters = {"start_date": 20230930, "end_date": 20240930, "ciks": [851968], "tags": ["IncomeTaxExpenseBenefit"]}
+    df = query_database("financials", parameters, all_ciks = True, all_tags = True)
+    df.info(memory_usage="deep")
     # df.to_csv("result.csv", index=False)
 
- 
-    # pivoted_df = df.pivot_table(
-    # index=["cik", "ddate"],
-    # columns="tag",
-    # values="value",
-    # aggfunc="first"  # In case there are multiple values for same adsh/ddate/tag combination
-    # ).reset_index()
-    # print(pivoted_df)
+
+    pivoted_df = df.pivot_table(
+    index=["cik", "ddate"],
+    columns="tag",
+    values="value",
+    aggfunc="first"  # In case there are multiple values for same adsh/ddate/tag combination
+    ).reset_index()
+    print(pivoted_df)
+    pivoted_df.info(memory_usage="deep")
     # pivoted_df.to_csv("pivoted_df.csv", index=False)
 
     # Testing sizes
     # Baseline - 343mb filesize. df = 1.6gb
     # Restricted columns - 230mb filesize. df = 835mb
-    create_database_table(year, quarter, "baseline")
+    # create_database_table(year, quarter, "baseline")
 
 
 
