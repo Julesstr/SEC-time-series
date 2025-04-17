@@ -196,25 +196,5 @@ def main():
     df.to_csv(f"results.csv", index=False)
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-    
-
- 
-
-
-
-
-
 if __name__ == "__main__":
     main()
