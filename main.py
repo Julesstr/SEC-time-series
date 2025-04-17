@@ -139,7 +139,7 @@ def query_database(database, parameters, all_ciks, all_tags):
         df = pd.DataFrame(rows, columns=columns)
 
         pivot_df = df.pivot_table(
-        index=["cik", "ddate"],
+        index=["cik", "ddate", "name"],
         columns="tag",
         values="value",
         aggfunc="first"  # In case there are multiple values for same adsh/ddate/tag combination
@@ -191,8 +191,11 @@ def main():
     # with open("all_cik.txt", "r") as f:
     #     all_cik = [int(float(line.strip())) for line in f if line.strip()]
 
-    parameters = {"start_date": 20090630, "end_date": 20240930, "ciks": [320193], "tags": ["Assets"]}
+    parameters = {"start_date": 20240630, "end_date": 20240930, "ciks": [320193, 789019], "tags": ["Assets", "Liabilities"]}
     df = query_database(database_name, parameters, all_ciks = False, all_tags = False)
+    df["ddate"] = pd.to_datetime(df["ddate"].astype(str), format="%Y%m%d")
+    df.sort_values(by=["cik", "ddate"], inplace=True)
+    print(df.to_string(index=False))
     df.to_csv(f"results.csv", index=False)
 
 
