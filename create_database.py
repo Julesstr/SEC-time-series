@@ -1,15 +1,9 @@
-import json
 import pandas as pd
 import sqlite3
 import requests
 import zipfile
 import os
-import sys
-import time
 import datetime
-
-# https://www.sec.gov/files/financial-statement-data-sets.pdf
-# https://xbrlview.fasb.org/yeti/resources/yeti-gwt/Yeti.jsp#tax~(id~174*v~10231)!net~(a~3474*l~832)!lang~(code~en-us)!rg~(rg~32*p~12)
 
 
 def download_quarter(year, quarter):
@@ -32,6 +26,7 @@ def download_quarter(year, quarter):
         zip_ref.extractall(f"Raw Aggregate Data/{year}q{quarter}")
     
     os.remove(f"Raw Aggregate Data/{year}q{quarter}.zip")
+
 
 def load_quarter(year, quarter):
     print(f"Loading data for {year} Q{quarter}...")
@@ -61,11 +56,13 @@ def load_quarter(year, quarter):
 
     return num_df, sub_df, tag_df
 
+
 def create_ddate(year, quarter):
     quarter_map = {1: "0331", 2: "0630", 3: "0930", 4: "1231"}
     ddate = f"{year}{quarter_map[quarter]}"
 
     return int(ddate)
+
 
 def include_only_quarter(num_df, year, quarter):
     ddate = create_ddate(year, quarter)
@@ -74,10 +71,12 @@ def include_only_quarter(num_df, year, quarter):
 
     return num_df
 
+
 def merge_two_dfs(df1, df2, on_var):
     merged_df = df1.merge(df2, on=on_var, how="left")
 
     return merged_df
+
 
 def create_database_table(year, quarter, database_name):
     con = sqlite3.connect(f"{database_name}.db")
@@ -139,10 +138,19 @@ def query_database(database, parameters, all_ciks, all_tags):
         columns = [desc[0] for desc in cursor.description]
         df = pd.DataFrame(rows, columns=columns)
 
-        full_df = pd.concat([full_df, df], ignore_index=True)
+        pivot_df = df.pivot_table(
+        index=["cik", "ddate"],
+        columns="tag",
+        values="value",
+        aggfunc="first"  # In case there are multiple values for same adsh/ddate/tag combination
+        ).reset_index()
+
+        full_df = pd.concat([full_df, pivot_df], ignore_index=True)
+
 
     con.close()
     return full_df
+
 
 def find_all_items(database, start_date, end_date, variable):
     con = sqlite3.connect(f"{database}.db")
@@ -171,38 +179,22 @@ def find_all_items(database, start_date, end_date, variable):
 
     return items
 
+
 def main():
-    # year = 2023
-    # quarter = 3
 
-    # find_all_items("financials", 20090630, 20240930, "cik")
-    with open("all_tag.txt", "r") as f:
-        all_tag = [line.strip() for line in f if line.strip()]
+    database_name = "financials"
+    # create_database(database_name)
 
-    with open("all_cik.txt", "r") as f:
-        all_cik = [int(float(line.strip())) for line in f if line.strip()]
+    # with open("all_tag.txt", "r") as f:
+    #     all_tag = [line.strip() for line in f if line.strip()]
 
-    # parameters = {"start_date": 20090630, "end_date": 20240930, "ciks": all_cik[:100], "tags": all_tag[:100]}
-    parameters = {"start_date": 20230930, "end_date": 20240930, "ciks": [851968], "tags": ["IncomeTaxExpenseBenefit"]}
-    df = query_database("financials", parameters, all_ciks = True, all_tags = True)
-    df.info(memory_usage="deep")
-    # df.to_csv("result.csv", index=False)
+    # with open("all_cik.txt", "r") as f:
+    #     all_cik = [int(float(line.strip())) for line in f if line.strip()]
 
+    parameters = {"start_date": 20090630, "end_date": 20240930, "ciks": [320193], "tags": ["Assets"]}
+    df = query_database(database_name, parameters, all_ciks = False, all_tags = False)
+    df.to_csv(f"results.csv", index=False)
 
-    pivoted_df = df.pivot_table(
-    index=["cik", "ddate"],
-    columns="tag",
-    values="value",
-    aggfunc="first"  # In case there are multiple values for same adsh/ddate/tag combination
-    ).reset_index()
-    print(pivoted_df)
-    pivoted_df.info(memory_usage="deep")
-    # pivoted_df.to_csv("pivoted_df.csv", index=False)
-
-    # Testing sizes
-    # Baseline - 343mb filesize. df = 1.6gb
-    # Restricted columns - 230mb filesize. df = 835mb
-    # create_database_table(year, quarter, "baseline")
 
 
 
